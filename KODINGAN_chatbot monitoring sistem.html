@@ -1,0 +1,98 @@
+from bs4 import BeautifulSoup
+import requests
+import logging
+import json
+import sys
+from telegram.ext.updater import Updater
+from telegram.update import Update
+from telegram.ext.callbackcontext import CallbackContext
+from telegram.ext.commandhandler import CommandHandler
+from telegram.ext.messagehandler import MessageHandler
+from telegram.ext.filters import Filters
+from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters, ConversationHandler)
+from telegram.ext import Updater, CommandHandler
+from telegram import ReplyKeyboardMarkup
+from requests.auth import HTTPBasicAuth
+
+
+user = 'nagiosadmin'
+passw = 'fikri123'
+host = 'all'
+timePeriod = 'today'
+urlbase = 'http://192.168.100.6/nagios/cgi-bin/'
+hostgroup='all'
+
+
+def hostcountstatus(grpname):
+        if grpname == '':
+                url = urlbase + 'statusjson.cgi?query=hostcount'
+        else:
+                url = urlbase + 'statusjson.cgi?query=hostcount&hostgroup=%s'%grpname
+        page = requests.get(url, auth=HTTPBasicAuth(user, passw))
+        print(page)
+        res = page.json()
+        data = {}
+        data['count'] = res['data']['count']
+        percentage = 100 * (float(data['count']['up']) / float(data['count']['down'] + data['count']['up']))
+        data['count']['percentage'] = "%0.1f%%"%percentage
+        return data
+
+
+
+
+updater = Updater('5807195857:AAEk-VzrBJJJQnsGcWcV_qWypLiiaJZdrkk', use_context=True)
+
+reply_keyboard =[['/start']]
+markup = ReplyKeyboardMarkup(reply_keyboard,one_time_keyboard=True)
+def start(update, context):
+        update.message.reply_text(
+                "HI ! My name is bot adakah yang bisa dibantu", reply_markup=markup
+		)
+
+
+def help(update: Update, context: CallbackContext):
+	update.message.reply_text("Your Message")
+
+
+
+def statushost(update: Update, context: CallbackContext):
+	
+        data = hostcountstatus("")
+        pesan = 'Jumlah host %s, yang hidup %s, yang mati %s'%(data['count']['up']+data['count']['down'], data['count']['up'], data['count']['down'])
+        update.message.reply_text(pesan)
+        
+def checkhost(update: Update, context: CallbackContext):
+        pesan = update.message.text
+        hostname = pesan.split()[1]
+        url = urlbase + 'statusjson.cgi?query=host&hostname=%s'%hostname
+        #update.message.reply_text('Anda akan memriksa status host %s'%hostname)
+        page = requests.get(url, auth=HTTPBasicAuth(user, passw))
+        
+        res = page.json()
+        update.message.reply_text(res['data']['host']['plugin_output'])
+
+def checkservice(update: Update, context: CallbackContext):
+        pesan = update.message.text
+        hostname = pesan.split()[1]
+        servicename = pesan.split()[2:]
+        servicename = ' '.join(servicename)
+        
+        url = urlbase + 'statusjson.cgi?query=service&hostname=%s&servicedescription=%s'%(hostname,servicename)
+        #update.message.reply_text('Anda akan memriksa status host %s'%hostname)
+        page = requests.get(url, auth=HTTPBasicAuth(user, passw))
+        res = page.json()
+        update.message.reply_text(res['data']['service']['plugin_output'])
+        
+
+
+updater.dispatcher.add_handler(CommandHandler('start', start))
+updater.dispatcher.add_handler(CommandHandler('help', help))
+updater.dispatcher.add_handler(CommandHandler('statushost',statushost))
+updater.dispatcher.add_handler(CommandHandler('checkservice',checkservice))
+updater.dispatcher.add_handler(CommandHandler('checkhost',checkhost))
+
+
+
+# Filters out unknown messages.
+
+updater.start_polling()
